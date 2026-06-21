@@ -1,0 +1,43 @@
+name: Test basic MongoDB startup
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Clean up any existing mongodb container
+        run: |
+          docker rm -f mongodb 2>/dev/null || true
+          echo "Cleanup done"
+
+      - name: Start MongoDB (default settings)
+        id: action
+        uses: .
+        with:
+          mongodb-version: '7.0'
+
+      - name: Assert MongoDB container is running
+        run: |
+          echo "Checking MongoDB container is running..."
+          docker ps -a
+          STATUS=$(docker inspect --format='{{.State.Status}}' mongodb 2>/dev/null || echo "not found")
+          echo "Container status: $STATUS"
+          if [ "$STATUS" != "running" ]; then
+            echo "FAIL: MongoDB container is not running (status: $STATUS)"
+            exit 1
+          fi
+          echo "PASS: MongoDB container is running"
+
+      - name: Assert MongoDB responds to ping
+        run: |
+          echo "Checking MongoDB responds to ping via docker exec..."
+          RESULT=$(docker exec mongodb mongosh --quiet --port 27017 --eval "db.runCommand({ ping: 1 }).ok" 2>/dev/null || echo "error")
+          echo "Result: $RESULT"
+          if [ "$RESULT" != "1" ]; then
+            echo "FAIL: MongoDB did not respond to ping (got: $RESULT)"
+            exit 1
+          fi
+          echo "PASS: MongoDB is running and responding on port 27017"
