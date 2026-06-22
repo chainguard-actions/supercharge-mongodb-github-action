@@ -8,6 +8,7 @@ Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at
 
 | Version | Tag | Upstream commit |
 |---------|-----|-----------------|
+| 1.12.0 | [`1.12.0`](https://github.com/chainguard-actions/supercharge-mongodb-github-action/tree/1.12.0) | [`90004df`](https://github.com/supercharge/mongodb-github-action/commit/90004df786821b6308fb02299e5835d0dae05d0d) |
 | v1.10.0 | [`v1.10.0`](https://github.com/chainguard-actions/supercharge-mongodb-github-action/tree/v1.10.0) | [`b0a1493`](https://github.com/supercharge/mongodb-github-action/commit/b0a1493307c4e9b82ed61f3858d606c5ff190c64) |
 
 ## Privacy
