@@ -1,0 +1,62 @@
+name: Test MongoDB with custom port
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Clean up any existing MongoDB containers
+        run: |
+          docker rm -f mongodb-custom-port 2>/dev/null || true
+
+      - name: Start MongoDB on custom port 27018
+        id: mongodb
+        uses: .
+        with:
+          mongodb-version: '7.0'
+          mongodb-port: 27018
+          mongodb-container-name: 'mongodb-custom-port'
+
+      - name: Assert MongoDB container is running
+        run: |
+          echo "Checking MongoDB container is running..."
+          RUNNING=$(docker ps --filter "name=mongodb-custom-port" --filter "status=running" --format "{{.Names}}" | grep -c "mongodb-custom-port" || true)
+          echo "Running containers matching 'mongodb-custom-port': $RUNNING"
+          if [ "$RUNNING" -lt 1 ]; then
+            echo "FAIL: MongoDB container 'mongodb-custom-port' is not running"
+            docker ps -a
+            exit 1
+          fi
+          echo "PASS: MongoDB container is running"
+
+      - name: Assert MongoDB responds on custom port 27018
+        run: |
+          echo "Checking MongoDB responds on port 27018..."
+          RESULT=$(docker exec mongodb-custom-port mongosh --quiet --port 27018 --eval "db.serverStatus().ok" 2>&1)
+          echo "Result: $RESULT"
+          if ! echo "$RESULT" | grep -q "1"; then
+            echo "FAIL: MongoDB did not respond on port 27018"
+            exit 1
+          fi
+          echo "PASS: MongoDB is responding on custom port 27018"
+
+      - name: Assert container port configuration includes 27018
+        run: |
+          echo "Verifying container is configured with port 27018..."
+          # Check the container's port configuration
+          PORTS=$(docker inspect mongodb-custom-port --format '{{json .HostConfig.PortBindings}}' 2>&1)
+          echo "Container port bindings: $PORTS"
+          if echo "$PORTS" | grep -q "27018"; then
+            echo "PASS: Container is correctly configured with port 27018"
+          else
+            echo "FAIL: Expected port 27018 configuration not found"
+            exit 1
+          fi
+
+      - name: Clean up
+        if: always()
+        run: |
+          docker rm -f mongodb-custom-port 2>/dev/null || true

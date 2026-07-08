@@ -1,0 +1,61 @@
+name: Test MongoDB with custom container name
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Clean up any existing MongoDB containers
+        run: |
+          docker rm -f my-custom-mongo 2>/dev/null || true
+          docker rm -f mongodb 2>/dev/null || true
+
+      - name: Start MongoDB with custom container name
+        id: mongodb
+        uses: .
+        with:
+          mongodb-version: '7.0'
+          mongodb-container-name: 'my-custom-mongo'
+
+      - name: Assert container exists with custom name
+        run: |
+          echo "Checking container exists with name 'my-custom-mongo'..."
+          RUNNING=$(docker ps --filter "name=my-custom-mongo" --filter "status=running" --format "{{.Names}}" | grep -c "my-custom-mongo" || true)
+          echo "Running containers matching 'my-custom-mongo': $RUNNING"
+          if [ "$RUNNING" -lt 1 ]; then
+            echo "FAIL: Container 'my-custom-mongo' is not running"
+            docker ps -a
+            exit 1
+          fi
+          echo "PASS: Container 'my-custom-mongo' is running"
+
+      - name: Assert MongoDB responds on the custom-named container
+        run: |
+          echo "Checking MongoDB responds via custom container name..."
+          RESULT=$(docker exec my-custom-mongo mongosh --quiet --port 27017 --eval "db.serverStatus().ok" 2>&1)
+          echo "Result: $RESULT"
+          if ! echo "$RESULT" | grep -q "1"; then
+            echo "FAIL: MongoDB did not respond via custom container name"
+            exit 1
+          fi
+          echo "PASS: MongoDB is responding via custom container name"
+
+      - name: Assert default container name 'mongodb' is NOT used
+        run: |
+          echo "Checking that default container name 'mongodb' is not used..."
+          # Check for exact match of 'mongodb' (not 'my-custom-mongo')
+          DEFAULT_RUNNING=$(docker ps --format "{{.Names}}" | grep -E "^mongodb$" | wc -l || true)
+          echo "Containers named exactly 'mongodb': $DEFAULT_RUNNING"
+          if [ "$DEFAULT_RUNNING" -gt 0 ]; then
+            echo "FAIL: A container named exactly 'mongodb' is running, expected custom name only"
+            exit 1
+          fi
+          echo "PASS: Custom container name was used correctly, no default 'mongodb' container"
+
+      - name: Clean up
+        if: always()
+        run: |
+          docker rm -f my-custom-mongo 2>/dev/null || true

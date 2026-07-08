@@ -1,0 +1,69 @@
+name: Test MongoDB with authentication
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Clean up any existing MongoDB containers
+        run: |
+          docker rm -f mongodb-auth 2>/dev/null || true
+
+      - name: Start MongoDB with authentication
+        id: mongodb
+        uses: .
+        with:
+          mongodb-version: '7.0'
+          mongodb-username: 'testuser'
+          mongodb-password: 'testpassword'
+          mongodb-db: 'testdb'
+          mongodb-container-name: 'mongodb-auth'
+
+      - name: Assert MongoDB container is running
+        run: |
+          echo "Checking MongoDB container is running..."
+          RUNNING=$(docker ps --filter "name=mongodb-auth" --filter "status=running" --format "{{.Names}}" | grep -c "mongodb-auth" || true)
+          echo "Running containers matching 'mongodb-auth': $RUNNING"
+          if [ "$RUNNING" -lt 1 ]; then
+            echo "FAIL: MongoDB container 'mongodb-auth' is not running"
+            docker ps -a
+            exit 1
+          fi
+          echo "PASS: MongoDB container is running"
+
+      - name: Assert MongoDB responds with valid credentials
+        run: |
+          echo "Checking MongoDB responds with valid credentials..."
+          RESULT=$(docker exec mongodb-auth mongosh --quiet --port 27017 \
+            --username testuser --password testpassword \
+            --authenticationDatabase admin \
+            --eval "db.serverStatus().ok" 2>&1)
+          echo "Result: $RESULT"
+          if ! echo "$RESULT" | grep -q "1"; then
+            echo "FAIL: MongoDB did not respond with valid credentials"
+            exit 1
+          fi
+          echo "PASS: MongoDB is responding with valid credentials"
+
+      - name: Assert MongoDB rejects invalid credentials
+        run: |
+          echo "Checking MongoDB rejects invalid credentials..."
+          RESULT=$(docker exec mongodb-auth mongosh --quiet --port 27017 \
+            --username testuser --password wrongpassword \
+            --authenticationDatabase admin \
+            --eval "db.serverStatus().ok" 2>&1 || true)
+          echo "Result: $RESULT"
+          # Should NOT contain "1" as a successful response on its own line
+          if echo "$RESULT" | grep -qE "^1$"; then
+            echo "FAIL: MongoDB accepted invalid credentials"
+            exit 1
+          fi
+          echo "PASS: MongoDB correctly rejected invalid credentials"
+
+      - name: Clean up
+        if: always()
+        run: |
+          docker rm -f mongodb-auth 2>/dev/null || true

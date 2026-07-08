@@ -1,0 +1,18 @@
+# See https://github.com/krzema12/github-actions-typing
+inputs:
+  mongodb-image:
+    type: string
+  mongodb-version:
+    type: string
+  mongodb-replica-set:
+    type: string
+  mongodb-port:
+    type: integer
+  mongodb-db:
+    type: string
+  mongodb-username:
+    type: string
+  mongodb-password:
+    type: string
+  mongodb-container-name:
+    type: string

@@ -1,0 +1,49 @@
+name: Test basic MongoDB startup (default settings)
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Clean up any existing MongoDB containers
+        run: |
+          docker rm -f mongodb 2>/dev/null || true
+
+      - name: Start MongoDB with defaults
+        id: mongodb
+        uses: .
+        with:
+          mongodb-version: '7.0'
+
+      - name: Assert MongoDB container is running
+        run: |
+          echo "Checking MongoDB container is running..."
+          RUNNING=$(docker ps --filter "name=mongodb" --filter "status=running" --format "{{.Names}}" | grep -c "mongodb" || true)
+          echo "Running MongoDB containers: $RUNNING"
+          if [ "$RUNNING" -lt 1 ]; then
+            echo "FAIL: No MongoDB container is running"
+            docker ps -a
+            exit 1
+          fi
+          echo "PASS: MongoDB container is running"
+
+      - name: Assert MongoDB responds to queries via docker exec
+        run: |
+          echo "Checking MongoDB responds to queries..."
+          CONTAINER=$(docker ps --filter "name=mongodb" --filter "status=running" --format "{{.Names}}" | head -1)
+          echo "Using container: $CONTAINER"
+          RESULT=$(docker exec "$CONTAINER" mongosh --quiet --port 27017 --eval "db.serverStatus().ok" 2>&1)
+          echo "Result: $RESULT"
+          if ! echo "$RESULT" | grep -q "1"; then
+            echo "FAIL: MongoDB did not respond correctly"
+            exit 1
+          fi
+          echo "PASS: MongoDB is responding to queries"
+
+      - name: Clean up
+        if: always()
+        run: |
+          docker rm -f mongodb 2>/dev/null || true

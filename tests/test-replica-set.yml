@@ -1,0 +1,78 @@
+name: Test MongoDB replica set
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Clean up any existing MongoDB containers
+        run: |
+          docker rm -f mongodb-rs 2>/dev/null || true
+
+      - name: Start MongoDB as replica set
+        id: mongodb
+        uses: .
+        with:
+          mongodb-version: '7.0'
+          mongodb-replica-set: 'rs0'
+          mongodb-container-name: 'mongodb-rs'
+
+      - name: Assert MongoDB container is running
+        run: |
+          echo "Checking MongoDB container is running..."
+          RUNNING=$(docker ps --filter "name=mongodb-rs" --filter "status=running" --format "{{.Names}}" | grep -c "mongodb-rs" || true)
+          echo "Running containers matching 'mongodb-rs': $RUNNING"
+          if [ "$RUNNING" -lt 1 ]; then
+            echo "FAIL: MongoDB container 'mongodb-rs' is not running"
+            docker ps -a
+            exit 1
+          fi
+          echo "PASS: MongoDB container is running"
+
+      - name: Wait for replica set to stabilize
+        run: |
+          echo "Waiting for replica set to fully initialize..."
+          sleep 5
+
+      - name: Assert replica set is initialized
+        run: |
+          echo "Checking replica set status..."
+          RS_STATUS=$(docker exec mongodb-rs mongosh --quiet --port 27017 --eval "rs.status().ok" 2>&1)
+          echo "Replica set status ok: $RS_STATUS"
+          if ! echo "$RS_STATUS" | grep -q "1"; then
+            echo "FAIL: Replica set is not initialized or not healthy"
+            docker exec mongodb-rs mongosh --quiet --port 27017 --eval "rs.status()" 2>&1 || true
+            exit 1
+          fi
+          echo "PASS: Replica set is initialized and healthy"
+
+      - name: Assert replica set name is correct
+        run: |
+          echo "Checking replica set name..."
+          RS_NAME=$(docker exec mongodb-rs mongosh --quiet --port 27017 --eval "rs.status().set" 2>&1)
+          echo "Replica set name: $RS_NAME"
+          if ! echo "$RS_NAME" | grep -q "rs0"; then
+            echo "FAIL: Expected replica set name 'rs0' but got: $RS_NAME"
+            exit 1
+          fi
+          echo "PASS: Replica set name is 'rs0'"
+
+      - name: Assert replica set member count
+        run: |
+          echo "Checking replica set member count..."
+          MEMBER_COUNT=$(docker exec mongodb-rs mongosh --quiet --port 27017 \
+            --eval "rs.status().members.length" 2>&1)
+          echo "Member count: $MEMBER_COUNT"
+          if ! echo "$MEMBER_COUNT" | grep -q "1"; then
+            echo "FAIL: Expected 1 replica set member but got: $MEMBER_COUNT"
+            exit 1
+          fi
+          echo "PASS: Replica set has 1 member as expected"
+
+      - name: Clean up
+        if: always()
+        run: |
+          docker rm -f mongodb-rs 2>/dev/null || true
